@@ -1,5 +1,15 @@
 # Zendesk MCP Integration Setup Guide
 
+[![smithery badge](https://smithery.ai/badge/@koundinya/zd-mcp-server)](https://smithery.ai/server/@koundinya/zd-mcp-server)
+
+## Installing via Smithery
+
+To install Zendesk Integration Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@koundinya/zd-mcp-server):
+
+```bash
+npx -y @smithery/cli install @koundinya/zd-mcp-server --client claude
+```
+
 ## Repository Setup
 
 1. Clone the repository:
