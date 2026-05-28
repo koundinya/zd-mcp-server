@@ -1,6 +1,6 @@
 {
   "name": "zd-mcp-server",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Zendesk MCP Server - Model Context Protocol server for Zendesk Support integration",
   "main": "dist/index.js",
   "bin": {

@@ -3,6 +3,14 @@ import zendesk from "node-zendesk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+// Custom headers sent with every request to Zendesk so that the MCP server
+// can be identified in API logs and audit trails.
+// `@types/node-zendesk` does not yet declare `customHeaders` on ClientOptions,
+// so we cast to `any` when calling createClient until the upstream types are updated.
+export const ZENDESK_CLIENT_HEADERS: Record<string, string> = {
+  "X-Zendesk-Client": "zd-mcp-server",
+};
+
 // Types for exported functions
 export interface ZendeskConfig {
   email: string;
@@ -16,7 +24,8 @@ export function createZendeskClient(config: ZendeskConfig) {
     username: config.email,
     token: config.token,
     remoteUri: `https://${config.subdomain}.zendesk.com/api/v2`,
-  });
+    customHeaders: ZENDESK_CLIENT_HEADERS,
+  } as any);
 }
 
 // Exported read-only tool functions
@@ -85,7 +94,8 @@ const client = zendesk.createClient({
   username: process.env.ZENDESK_EMAIL as string,
   token: process.env.ZENDESK_TOKEN as string,
   remoteUri: `https://${process.env.ZENDESK_SUBDOMAIN}.zendesk.com/api/v2`,
-});
+  customHeaders: ZENDESK_CLIENT_HEADERS,
+} as any);
 
 export function zenDeskTools(server: McpServer) {
   server.tool(
