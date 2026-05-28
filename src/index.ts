@@ -35,6 +35,15 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Send an initial log message to satisfy the logging capability contract
+  // and confirm the server is ready.
+  await (server as any).server.sendLoggingMessage({
+    level: "info",
+    data: `Zendesk MCP Server v${VERSION} ready`,
+    logger: "zd-mcp-server",
+  });
+
   console.error(`Zendesk MCP Server v${VERSION} running on stdio`);
 }
 
