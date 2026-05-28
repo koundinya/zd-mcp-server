@@ -2,6 +2,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SetLevelRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { zenDeskTools, createZendeskClient, searchTickets, getTicket, getTicketDetails, getLinkedIncidents } from "./tools/index.js";
 
 // Re-export the functions for library usage
@@ -33,8 +34,25 @@ async function main() {
 
   zenDeskTools(server);
 
+  // Handle logging/setLevel requests from the client (e.g. MCP Inspector).
+  // The low-level Server validates the capability; we just need a handler
+  // that acknowledges the request — sendLoggingMessage already respects
+  // the level filtering internally.
+  (server as any).server.setRequestHandler(SetLevelRequestSchema, async () => {
+    return {};
+  });
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Send an initial log message to satisfy the logging capability contract
+  // and confirm the server is ready.
+  await (server as any).server.sendLoggingMessage({
+    level: "info",
+    data: `Zendesk MCP Server v${VERSION} ready`,
+    logger: "zd-mcp-server",
+  });
+
   console.error(`Zendesk MCP Server v${VERSION} running on stdio`);
 }
 

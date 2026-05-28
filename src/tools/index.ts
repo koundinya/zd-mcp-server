@@ -3,6 +3,18 @@ import zendesk from "node-zendesk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+// Custom headers sent with every request to Zendesk so that the MCP server
+// can be identified in API logs and audit trails.
+// `@types/node-zendesk` does not yet declare `customHeaders` on ClientOptions;
+// we extend the type locally until upstream types are updated.
+interface ZendeskClientOptions extends ZendeskTypes.ClientOptions {
+  customHeaders?: Record<string, string>;
+}
+
+export const ZENDESK_CLIENT_HEADERS: Record<string, string> = {
+  "X-ZD-MCP-Server": "zd-mcp-server",
+};
+
 // Types for exported functions
 export interface ZendeskConfig {
   email: string;
@@ -12,11 +24,13 @@ export interface ZendeskConfig {
 
 // Create Zendesk client
 export function createZendeskClient(config: ZendeskConfig) {
-  return zendesk.createClient({
+  const options: ZendeskClientOptions = {
     username: config.email,
     token: config.token,
     remoteUri: `https://${config.subdomain}.zendesk.com/api/v2`,
-  });
+    customHeaders: ZENDESK_CLIENT_HEADERS,
+  };
+  return zendesk.createClient(options as ZendeskTypes.ClientOptions);
 }
 
 // Exported read-only tool functions
@@ -81,11 +95,25 @@ if (!process.env.ZENDESK_EMAIL || !process.env.ZENDESK_TOKEN || !process.env.ZEN
   throw new Error('Missing required environment variables: ZENDESK_EMAIL, ZENDESK_TOKEN, ZENDESK_SUBDOMAIN');
 }
 
-const client = zendesk.createClient({
-  username: process.env.ZENDESK_EMAIL as string,
-  token: process.env.ZENDESK_TOKEN as string,
-  remoteUri: `https://${process.env.ZENDESK_SUBDOMAIN}.zendesk.com/api/v2`,
+const client = createZendeskClient({
+  email: process.env.ZENDESK_EMAIL,
+  token: process.env.ZENDESK_TOKEN,
+  subdomain: process.env.ZENDESK_SUBDOMAIN,
 });
+
+// Helper to send log messages via the underlying low-level Server instance.
+// McpServer wraps Server as `server.server`; sendLoggingMessage lives there.
+async function log(
+  server: McpServer,
+  level: "debug" | "info" | "warning" | "error",
+  message: string
+) {
+  try {
+    await (server as any).server.sendLoggingMessage({ level, data: message, logger: "zd-mcp-server" });
+  } catch {
+    // Client may not have a logging handler connected yet; swallow silently.
+  }
+}
 
 export function zenDeskTools(server: McpServer) {
   server.tool(
@@ -95,9 +123,9 @@ export function zenDeskTools(server: McpServer) {
       ticket_id: z.string().describe("The ID of the ticket to retrieve"),
     },
     async ({ ticket_id }) => {
+      await log(server, "info", `zendesk_get_ticket: fetching ticket ${ticket_id}`);
       try {
         const result = await getTicket(client, parseInt(ticket_id, 10));
-
         return {
           content: [{
             type: "text",
@@ -105,6 +133,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_get_ticket: failed for ticket ${ticket_id} — ${error.message}`);
         return {
           content: [{
             type: "text",
@@ -129,6 +158,7 @@ export function zenDeskTools(server: McpServer) {
       tags: z.array(z.string()).optional().describe("Tags to set on the ticket (replaces existing tags)")
     },
     async ({ ticket_id, subject, status, priority, type, assignee_id, tags }) => {
+      await log(server, "info", `zendesk_update_ticket: updating ticket ${ticket_id}`);
       try {
         const ticketData: any = {
           ticket: {}
@@ -145,7 +175,6 @@ export function zenDeskTools(server: McpServer) {
         const result = await new Promise((resolve, reject) => {
           (client as any).tickets.update(parseInt(ticket_id, 10), ticketData, (error: Error | undefined, req: any, result: any) => {
             if (error) {
-              console.log(error);
               reject(error);
             } else {
               resolve(result);
@@ -160,6 +189,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_update_ticket: failed for ticket ${ticket_id} — ${error.message}`);
         return {
           content: [{
             type: "text",
@@ -183,6 +213,7 @@ export function zenDeskTools(server: McpServer) {
       tags: z.array(z.string()).optional().describe("Tags to add to the ticket")
     },
     async ({ subject, description, priority, status, type, tags }) => {
+      await log(server, "info", `zendesk_create_ticket: creating ticket with subject "${subject}"`);
       try {
         const ticketData: any = {
           ticket: {
@@ -199,7 +230,6 @@ export function zenDeskTools(server: McpServer) {
         const result = await new Promise((resolve, reject) => {
           (client as any).tickets.create(ticketData, (error: Error | undefined, req: any, result: any) => {
             if (error) {
-              console.log(error);
               reject(error);
             } else {
               resolve(result);
@@ -214,6 +244,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_create_ticket: failed — ${error.message}`);
         return {
           content: [{
             type: "text",
@@ -233,6 +264,7 @@ export function zenDeskTools(server: McpServer) {
       note: z.string().describe("The content of the private note")
     },
     async ({ ticket_id, note }) => {
+      await log(server, "info", `zendesk_add_private_note: adding note to ticket ${ticket_id}`);
       try {
         const result = await new Promise((resolve, reject) => {
           (client as any).tickets.update(parseInt(ticket_id, 10), {
@@ -244,7 +276,6 @@ export function zenDeskTools(server: McpServer) {
             }
           }, (error: Error | undefined, req: any, result: any) => {
             if (error) {
-              console.log(error);
               reject(error);
             } else {
               resolve(result);
@@ -259,6 +290,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_add_private_note: failed for ticket ${ticket_id} — ${error.message}`);
         return {
           content: [{
             type: "text",
@@ -278,6 +310,7 @@ export function zenDeskTools(server: McpServer) {
       comment: z.string().describe("The content of the public comment")
     },
     async ({ ticket_id, comment }) => {
+      await log(server, "info", `zendesk_add_public_note: adding comment to ticket ${ticket_id}`);
       try {
         const result = await new Promise((resolve, reject) => {
           (client as any).tickets.update(parseInt(ticket_id, 10), {
@@ -289,7 +322,6 @@ export function zenDeskTools(server: McpServer) {
             }
           }, (error: Error | undefined, req: any, result: any) => {
             if (error) {
-              console.log(error);
               reject(error);
             } else {
               resolve(result);
@@ -304,6 +336,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_add_public_note: failed for ticket ${ticket_id} — ${error.message}`);
         return {
           content: [{
             type: "text",
@@ -322,9 +355,9 @@ export function zenDeskTools(server: McpServer) {
       query: z.string().describe("Search query (e.g., 'status:open', 'priority:urgent', 'tags:need_help')"),
     },
     async ({ query }) => {
+      await log(server, "info", `zendesk_search: query "${query}"`);
       try {
         const result = await searchTickets(client, query);
-
         return {
           content: [{
             type: "text",
@@ -332,6 +365,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_search: failed — ${error.message}`);
         return {
           content: [{
             type: "text",
@@ -350,9 +384,9 @@ export function zenDeskTools(server: McpServer) {
       ticket_id: z.string().describe("The ID of the ticket to retrieve details for"),
     },
     async ({ ticket_id }) => {
+      await log(server, "info", `zendesk_get_ticket_details: fetching details for ticket ${ticket_id}`);
       try {
         const result = await getTicketDetails(client, parseInt(ticket_id, 10));
-
         return {
           content: [{
             type: "text",
@@ -360,6 +394,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_get_ticket_details: failed for ticket ${ticket_id} — ${error.message}`);
         return {
           content: [{
             type: "text",
@@ -378,9 +413,9 @@ export function zenDeskTools(server: McpServer) {
       ticket_id: z.string().describe("The ID of the ticket to retrieve linked incidents for"),
     },
     async ({ ticket_id }) => {
+      await log(server, "info", `zendesk_get_linked_incidents: fetching incidents for ticket ${ticket_id}`);
       try {
         const result = await getLinkedIncidents(client, parseInt(ticket_id, 10));
-
         return {
           content: [{
             type: "text",
@@ -388,6 +423,7 @@ export function zenDeskTools(server: McpServer) {
           }]
         };
       } catch (error: any) {
+        await log(server, "error", `zendesk_get_linked_incidents: failed for ticket ${ticket_id} — ${error.message}`);
         return {
           content: [{
             type: "text",
