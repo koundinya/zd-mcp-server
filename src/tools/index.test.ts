@@ -48,13 +48,18 @@ describe("env-based client", () => {
   });
 
   it("is initialised with the X-ZD-MCP-Server custom header", async () => {
-    // Importing the module triggers the env-based createClient call at the top level
-    await import("./index.js");
+    // Get a reference to the mock BEFORE importing index.js so we capture
+    // the createClient call that fires at module load time, then clear any
+    // prior calls so only the env-client instantiation is counted.
     const zendesk = (await import("node-zendesk")).default;
+    vi.mocked(zendesk.createClient).mockClear();
 
+    // Importing index.js triggers the module-level createClient call
     const { ZENDESK_CLIENT_HEADERS } = await import("./index.js");
 
-    const envClientCall = vi.mocked(zendesk.createClient).mock.calls[0][0] as any;
-    expect(envClientCall.customHeaders).toEqual(ZENDESK_CLIENT_HEADERS);
+    // Should have been called exactly once for the env-based client
+    expect(vi.mocked(zendesk.createClient)).toHaveBeenCalledOnce();
+    const callArg = vi.mocked(zendesk.createClient).mock.calls[0][0] as any;
+    expect(callArg.customHeaders).toEqual(ZENDESK_CLIENT_HEADERS);
   });
 });
