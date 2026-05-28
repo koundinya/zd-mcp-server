@@ -5,10 +5,14 @@ import { z } from "zod";
 
 // Custom headers sent with every request to Zendesk so that the MCP server
 // can be identified in API logs and audit trails.
-// `@types/node-zendesk` does not yet declare `customHeaders` on ClientOptions,
-// so we cast to `any` when calling createClient until the upstream types are updated.
+// `@types/node-zendesk` does not yet declare `customHeaders` on ClientOptions;
+// we extend the type locally until upstream types are updated.
+interface ZendeskClientOptions extends ZendeskTypes.ClientOptions {
+  customHeaders?: Record<string, string>;
+}
+
 export const ZENDESK_CLIENT_HEADERS: Record<string, string> = {
-  "X-Zendesk-Client": "zd-mcp-server",
+  "X-ZD-MCP-Server": "zd-mcp-server",
 };
 
 // Types for exported functions
@@ -20,12 +24,13 @@ export interface ZendeskConfig {
 
 // Create Zendesk client
 export function createZendeskClient(config: ZendeskConfig) {
-  return zendesk.createClient({
+  const options: ZendeskClientOptions = {
     username: config.email,
     token: config.token,
     remoteUri: `https://${config.subdomain}.zendesk.com/api/v2`,
     customHeaders: ZENDESK_CLIENT_HEADERS,
-  } as any);
+  };
+  return zendesk.createClient(options as ZendeskTypes.ClientOptions);
 }
 
 // Exported read-only tool functions
@@ -90,12 +95,11 @@ if (!process.env.ZENDESK_EMAIL || !process.env.ZENDESK_TOKEN || !process.env.ZEN
   throw new Error('Missing required environment variables: ZENDESK_EMAIL, ZENDESK_TOKEN, ZENDESK_SUBDOMAIN');
 }
 
-const client = zendesk.createClient({
-  username: process.env.ZENDESK_EMAIL as string,
-  token: process.env.ZENDESK_TOKEN as string,
-  remoteUri: `https://${process.env.ZENDESK_SUBDOMAIN}.zendesk.com/api/v2`,
-  customHeaders: ZENDESK_CLIENT_HEADERS,
-} as any);
+const client = createZendeskClient({
+  email: process.env.ZENDESK_EMAIL,
+  token: process.env.ZENDESK_TOKEN,
+  subdomain: process.env.ZENDESK_SUBDOMAIN,
+});
 
 export function zenDeskTools(server: McpServer) {
   server.tool(
