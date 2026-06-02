@@ -2,17 +2,42 @@ import type * as ZendeskTypes from "node-zendesk";
 import zendesk from "node-zendesk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
 // Custom headers sent with every request to Zendesk so that the MCP server
-// can be identified in API logs and audit trails.
+// can be identified in API logs and audit trails. We override the default
+// `User-Agent` set by node-zendesk so requests are clearly attributable to
+// this MCP server.
 // `@types/node-zendesk` does not yet declare `customHeaders` on ClientOptions;
 // we extend the type locally until upstream types are updated.
 interface ZendeskClientOptions extends ZendeskTypes.ClientOptions {
   customHeaders?: Record<string, string>;
 }
 
+// Resolve the package version at runtime by reading the bundled `package.json`.
+// `process.env.npm_package_version` is only populated when launched via `npm`
+// scripts, which isn't the case for `npx zd-mcp-server` or the published bin —
+// reading the file directly works in every launch mode.
+function resolvePackageVersion(): string {
+  try {
+    const require = createRequire(import.meta.url);
+    // Compiled output lives at `dist/tools/index.js`, so `package.json` is
+    // two directories up. The same relative layout is preserved in the
+    // published tarball.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const pkg = require(resolve(here, "../../package.json")) as { version?: string };
+    return pkg.version ?? "dev";
+  } catch {
+    return "dev";
+  }
+}
+
+const PKG_VERSION = resolvePackageVersion();
+
 export const ZENDESK_CLIENT_HEADERS: Record<string, string> = {
-  "X-ZD-MCP-Server": "zd-mcp-server",
+  "User-Agent": `zd-mcp-server/${PKG_VERSION}`,
 };
 
 // Types for exported functions
