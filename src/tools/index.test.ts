@@ -16,9 +16,9 @@ describe("ZENDESK_CLIENT_HEADERS", () => {
     vi.resetModules();
   });
 
-  it("includes the X-ZD-MCP-Server header", async () => {
+  it("sets a User-Agent identifying the MCP server", async () => {
     const { ZENDESK_CLIENT_HEADERS } = await import("./index.js");
-    expect(ZENDESK_CLIENT_HEADERS["X-ZD-MCP-Server"]).toBe("zd-mcp-server");
+    expect(ZENDESK_CLIENT_HEADERS["User-Agent"]).toMatch(/^zd-mcp-server\//);
   });
 });
 
@@ -27,7 +27,7 @@ describe("createZendeskClient", () => {
     vi.resetModules();
   });
 
-  it("passes X-ZD-MCP-Server custom header to createClient", async () => {
+  it("passes the User-Agent custom header to createClient", async () => {
     const { createZendeskClient, ZENDESK_CLIENT_HEADERS } = await import("./index.js");
     const zendesk = (await import("node-zendesk")).default;
 
@@ -47,7 +47,7 @@ describe("env-based client", () => {
     vi.resetModules();
   });
 
-  it("is initialised with the X-ZD-MCP-Server custom header", async () => {
+  it("is initialised with the User-Agent custom header", async () => {
     // Get a reference to the mock BEFORE importing index.js so we capture
     // the createClient call that fires at module load time, then clear any
     // prior calls so only the env-client instantiation is counted.
