@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/koundinya-zd-mcp-server-badge.png)](https://mseep.ai/app/koundinya-zd-mcp-server)
+
 # Zendesk MCP Server
 
 [![npm version](https://badge.fury.io/js/zd-mcp-server.svg)](https://www.npmjs.com/package/zd-mcp-server)
