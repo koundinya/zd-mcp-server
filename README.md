@@ -2,6 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/zd-mcp-server.svg)](https://www.npmjs.com/package/zd-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCPAmpel](https://img.shields.io/endpoint?url=https://mcpampel.com/badge/koundinya/zd-mcp-server.json)](https://mcpampel.com/repo/koundinya/zd-mcp-server)
 
 A Model Context Protocol (MCP) server that provides AI assistants like Claude with seamless integration to Zendesk Support. Enables natural language interactions with Zendesk tickets, allowing you to search, create, update, and manage support tickets through conversational AI.
 
