@@ -12,6 +12,7 @@ A Model Context Protocol (MCP) server that provides AI assistants like Claude wi
 - 🔍 **Advanced Search**: Search tickets using Zendesk's powerful query syntax
 - 🔗 **Incident Management**: Retrieve and manage linked incident tickets
 - 🏷️ **Tag Management**: Add and manage ticket tags and metadata
+- 📎 **Attachment Fetching**: Retrieve attachment content by URL or numeric ID, with inline image rendering
 - 🔒 **Secure Authentication**: Uses Zendesk API tokens for secure access
 - 🚀 **Easy Installation**: Available via npm, npx, or manual setup
 
@@ -128,6 +129,7 @@ For other MCP-compatible clients (Cline, Windsurf, etc.), refer to their documen
 | `zendesk_add_private_note` | Add internal agent notes | "Add a private note about investigation progress" |
 | `zendesk_add_public_note` | Add public customer comments | "Reply to customer with solution steps" |
 | `zendesk_get_linked_incidents` | Get incident tickets linked to problems | "Show incidents related to this problem ticket" |
+| `zendesk_get_attachment` | Fetch attachment content by URL or ID | "Show me the attachment from ticket #12345" |
 
 ## 💬 Usage Examples
 
@@ -151,6 +153,13 @@ Once configured, you can use natural language with your AI assistant:
 ```
 "Add a public comment to ticket #789: 'We've identified the issue and working on a fix'"
 "Add a private note: 'Customer confirmed the workaround is effective'"
+```
+
+### Attachments
+```
+"Show me the screenshot attached to ticket #12345"
+"Fetch the attachment at https://your-subdomain.zendesk.com/attachments/token/abc123/?name=image.png"
+"Get attachment ID 9876543210"
 ```
 
 ### Advanced Queries
