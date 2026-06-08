@@ -132,6 +132,8 @@ export async function getAttachment(
     fetchUrl = meta.content_url;
   }
 
+  const MAX_BYTES = 15 * 1024 * 1024; // 15MB
+
   const authHeader = `Basic ${Buffer.from(`${email}/token:${token}`).toString("base64")}`;
   const res = await fetch(fetchUrl, {
     headers: { Authorization: authHeader },
@@ -139,12 +141,32 @@ export async function getAttachment(
   });
   if (!res.ok) throw new Error(`Attachment fetch failed: ${res.status}`);
 
+  const contentLength = res.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > MAX_BYTES) {
+    const mb = (parseInt(contentLength, 10) / 1024 / 1024).toFixed(1);
+    throw new Error(`Attachment too large: ${mb}MB exceeds 15MB limit`);
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  const reader = res.body!.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_BYTES) {
+      await reader.cancel();
+      throw new Error(`Attachment too large: exceeds 15MB limit`);
+    }
+    chunks.push(value);
+  }
+
   const mimeType = res.headers.get("content-type") ?? "application/octet-stream";
   const isImage = mimeType.startsWith("image/");
-  const buffer = await res.arrayBuffer();
+  const buffer = Buffer.concat(chunks.map(c => Buffer.from(c)));
   const data = isImage
-    ? Buffer.from(buffer).toString("base64")
-    : Buffer.from(buffer).toString("utf-8");
+    ? buffer.toString("base64")
+    : buffer.toString("utf-8");
 
   return { data, mimeType, isImage };
 }
