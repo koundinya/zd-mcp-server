@@ -114,6 +114,63 @@ export async function getLinkedIncidents(client: any, ticketId: number): Promise
   });
 }
 
+export async function getAttachment(
+  client: any,
+  email: string,
+  token: string,
+  urlOrId: string
+): Promise<{ data: string; mimeType: string; isImage: boolean }> {
+  // Resolve a numeric ID to a content_url via the Zendesk client
+  let fetchUrl = urlOrId;
+  if (/^\d+$/.test(urlOrId)) {
+    const meta = await new Promise<any>((resolve, reject) => {
+      client.attachments.show(parseInt(urlOrId, 10), (error: Error | undefined, _req: any, result: any) => {
+        if (error) reject(error);
+        else resolve(result);
+      });
+    });
+    fetchUrl = meta.content_url;
+  }
+
+  const MAX_BYTES = 15 * 1024 * 1024; // 15MB
+
+  const authHeader = `Basic ${Buffer.from(`${email}/token:${token}`).toString("base64")}`;
+  const res = await fetch(fetchUrl, {
+    headers: { Authorization: authHeader },
+    redirect: "follow",
+  });
+  if (!res.ok) throw new Error(`Attachment fetch failed: ${res.status}`);
+
+  const contentLength = res.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > MAX_BYTES) {
+    const mb = (parseInt(contentLength, 10) / 1024 / 1024).toFixed(1);
+    throw new Error(`Attachment too large: ${mb}MB exceeds 15MB limit`);
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  const reader = res.body!.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_BYTES) {
+      await reader.cancel();
+      throw new Error(`Attachment too large: exceeds 15MB limit`);
+    }
+    chunks.push(value);
+  }
+
+  const mimeType = res.headers.get("content-type") ?? "application/octet-stream";
+  const isImage = mimeType.startsWith("image/");
+  const buffer = Buffer.concat(chunks.map(c => Buffer.from(c)));
+  const data = isImage
+    ? buffer.toString("base64")
+    : buffer.toString("utf-8");
+
+  return { data, mimeType, isImage };
+}
+
 // Environment-based client for backward compatibility
 
 if (!process.env.ZENDESK_EMAIL || !process.env.ZENDESK_TOKEN || !process.env.ZENDESK_SUBDOMAIN) {
@@ -449,6 +506,51 @@ export function zenDeskTools(server: McpServer) {
         };
       } catch (error: any) {
         await log(server, "error", `zendesk_get_linked_incidents: failed for ticket ${ticket_id} — ${error.message}`);
+        return {
+          content: [{
+            type: "text",
+            text: `Error: ${error.message || 'Unknown error occurred'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "zendesk_get_attachment",
+    "Fetch an attachment from Zendesk by URL or attachment ID. Returns images as base64, text files as plain text.",
+    {
+      url_or_id: z.string().describe(
+        "Either a full Zendesk attachment URL (e.g. https://shogo.zendesk.com/attachments/token/.../?name=image.png) or a numeric attachment ID"
+      ),
+    },
+    async ({ url_or_id }) => {
+      await log(server, "info", `zendesk_get_attachment: fetching ${url_or_id}`);
+      try {
+        const { data, mimeType, isImage } = await getAttachment(
+          client,
+          process.env.ZENDESK_EMAIL!,
+          process.env.ZENDESK_TOKEN!,
+          url_or_id
+        );
+        if (isImage) {
+          return {
+            content: [{
+              type: "image",
+              data,
+              mimeType,
+            }]
+          };
+        }
+        return {
+          content: [{
+            type: "text",
+            text: data,
+          }]
+        };
+      } catch (error: any) {
+        await log(server, "error", `zendesk_get_attachment: failed — ${error.message}`);
         return {
           content: [{
             type: "text",
